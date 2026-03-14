@@ -1,0 +1,53 @@
+# Task: Helper for PV Calc Pro
+
+- [x] Extract parameters from Jinko Solar PDF <!-- id: 0 -->
+- [x] Back up project to GitHub as "wersja 1.3"
+    - [x] Identify Git repository
+    - [x] Create new branch "wersja-1.3"
+    - [x] Push current state to "wersja-1.3"
+- [x] Multi-variant AI Extraction Support
+  - [x] Modify Gemini prompt to extract all power variants
+  - [x] Add UI selection for extracted variants
+  - [x] Implement automatic form update based on selected variant
+  - [x] Link selected variant power to global "Moc modułów" property
+- [x] Fix "pdfJS is not a function" error <!-- id: 4 -->
+- [x] Fix "No PDFJS.workerSrc specified" error
+    - [x] Move `pdf-parse` logic to `main.js`
+    - [x] Set up Electron IPC for communication
+    - [x] Update `renderer.js` to use IPC invoke
+- [x] Verify extraction with Gemini API <!-- id: 5 -->
+    - [x] Resolve 'model not found' (switched to `gemini-2.5-flash`)
+    - [x] Fix 'quota exceeded' (found model with non-zero limit)
+    - [x] Implement JSON safety cleaning
+- [x] Verify simulation works with extracted data <!-- id: 6 -->
+- [x] Security Audit & Key Protection
+    - [x] Remove hardcoded AIza key from `renderer.js`
+    - [x] Restore API Key management UI in `index.html`
+    - [x] Implement `localStorage` prioritization for API keys
+    - [x] Create `.gitignore` to prevent sensitive data leaks
+    - [x] Cleanup temporary diagnostic files
+- [x] Implement Simulation Logic
+    - [x] Add missing control fields (modules/string, strings/MPPT) to UI
+    - [x] Define missing `updateCalculations` function
+    - [x] Link simulation to refined physics model
+- [x] Implement PV Characteristic Charts
+    - [x] Add Chart.js to `index.html`
+    - [x] Create Chart Modal UI
+    - [x] Implement I-V/P-V curve calculation logic
+    - [x] Add image export functionality
+    - [x] Link to simulation button
+- [x] Granular MPPT Configuration
+    - [x] Move "Strings per MPPT" from Sidebar to Table Rows
+    - [x] Update `buildProtocolTable` to include string count selector
+    - [x] Modify `simulateOneMPPT` to read local row state
+    - [x] Update UI styles for the new row elements
+- [x] Decouple Simulation and Generation
+    - [x] Restore simple random generator for "Generuj" button
+    - [x] Keep physics-based simulation for "Symuluj" button
+    - [x] Remove inter-dependency between the two functions
+- [ ] Back up project to GitHub as "Wersja 1.6"
+    - [x] Create branch `wersja-1.6`
+    - [x] Push `index.html` to `wersja-1.6`
+    - [x] Push `renderer.js` to `wersja-1.6`
+    - [x] Push `style.css` to `wersja-1.6`
+    - [x] Push documentation (`task.md`, `walkthrough.md`) to `wersja-1.6`

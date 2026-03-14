@@ -67,7 +67,7 @@
 
             <section id="tab-content" class="scrollable-content">
 
-                <!-- DC Params Tab — Tabela Protokołowa -->
+                <!-- DC Params Tab -->
                 <div class="tab-panel active" id="dc-params">
                     <div class="table-toolbar">
                         <button id="gen-dc-params-btn" class="tool-btn">🔁 Generuj pomiary DC/AC</button>
@@ -82,9 +82,7 @@
                                     <th class="col-ocena">Ocena<br>[OK/Błąd]</th>
                                 </tr>
                             </thead>
-                            <tbody id="protocol-body">
-                                <!-- Generowane przez renderer.js -->
-                            </tbody>
+                            <tbody id="protocol-body"></tbody>
                         </table>
                     </div>
                 </div>
@@ -113,12 +111,6 @@
 
                 <!-- AC / IPZ Tab -->
                 <div class="tab-panel" id="ac-params">
-                    <div class="info-card">
-                        <strong>Wzór:</strong> Zs max = Un / (In × k_wkł),&nbsp;&nbsp;
-                        gdzie <em>k_wkł</em> — krotność wkładki topikowej dla t=0,4 s (wg tabeli PN).<br>
-                        <small>Po wpisaniu In [A] wartość k zostanie auto-uzupełniona z tabeli. Możesz ją zmienić ręcznie.</small>
-                    </div>
-
                     <div class="table-toolbar">
                         <button id="gen-zs-btn" class="tool-btn">🔁 Generuj Zs zmierzone</button>
                         <button id="add-ipz-row-btn" class="tool-btn secondary">＋ Dodaj obwód</button>
@@ -129,18 +121,16 @@
                             <thead>
                                 <tr>
                                     <th>Obwód / Faza</th>
-                                    <th>Zabezpieczenie (typ)</th>
+                                    <th>Zabezpieczenie</th>
                                     <th>In [A]</th>
-                                    <th>k (wkł. top.)</th>
-                                    <th>Ia (wył.) [A]</th>
+                                    <th>k</th>
+                                    <th>Ia [A]</th>
                                     <th>Zs max [Ω]</th>
                                     <th>Zs zmierzona [Ω]</th>
                                     <th>Ocena</th>
                                 </tr>
                             </thead>
-                            <tbody id="ipz-body">
-                                <!-- Generowane przez JS -->
-                            </tbody>
+                            <tbody id="ipz-body"></tbody>
                         </table>
                     </div>
                 </div>
@@ -172,21 +162,9 @@
 
                 <!-- PV Module / AI Tab -->
                 <div class="tab-panel" id="pv-module">
-
-                    <!-- AI Key section (Hidden - Hardcoded in renderer.js) -->
-                    <div class="ai-key-bar" style="display: none;">
-                        <span class="ai-key-label">🔑 Klucz Gemini API:</span>
-                        <input type="password" id="openai-key" placeholder="AIza..." class="ai-key-input">
-                        <button id="toggle-key-btn" class="tool-btn secondary" style="padding:8px 12px;">👁</button>
-                        <button id="save-key-btn" class="tool-btn" style="padding:8px 14px;">Zapisz</button>
-                        <div id="key-status" class="key-status"></div>
-                    </div>
-
-                    <!-- PDF Drop Zone -->
                     <div class="pdf-drop-zone" id="pdf-drop-zone">
                         <div class="pdf-drop-icon">📄</div>
                         <div class="pdf-drop-text">Przeciągnij kartę katalogową (PDF) lub kliknij, aby wybrać plik</div>
-                        <div class="pdf-drop-hint">Obsługiwane formaty: PDF</div>
                         <input type="file" id="pdf-file-input" accept=".pdf" style="display:none">
                     </div>
 
@@ -195,72 +173,38 @@
                         <div id="ai-status" class="ai-status-msg"></div>
                     </div>
 
-                    <!-- Module Parameters Grid -->
-                    <div class="module-section-title">📋 Parametry modułu PV (STC: 1000 W/m², 25°C)</div>
+                    <div id="variant-selection-container" style="display: none; margin-bottom: 24px;">
+                        <div class="module-section-title">📦 Wykryte warianty mocy (Wybierz jeden)</div>
+                        <div id="variant-buttons-list" class="variant-grid"></div>
+                    </div>
+
+                    <div class="module-section-title">📋 Parametry modułu PV</div>
                     <div class="module-params-grid">
-                        <div class="param-group">
-                            <label>Producent</label>
-                            <input type="text" id="mod-manufacturer" class="module-input" placeholder="np. JA Solar">
-                        </div>
-                        <div class="param-group">
-                            <label>Model</label>
-                            <input type="text" id="mod-model" class="module-input" placeholder="np. JAM72S30-545MR">
-                        </div>
-                        <div class="param-group">
-                            <label>Pmax [Wp]</label>
-                            <input type="number" id="mod-pmax" class="module-input" placeholder="np. 415" step="0.01">
-                        </div>
-                        <div class="param-group">
-                            <label>Vmp [V]</label>
-                            <input type="number" id="mod-vmp" class="module-input" placeholder="np. 34.5" step="0.01">
-                        </div>
-                        <div class="param-group">
-                            <label>Imp [A]</label>
-                            <input type="number" id="mod-imp" class="module-input" placeholder="np. 12.02" step="0.01">
-                        </div>
-                        <div class="param-group">
-                            <label>Voc [V]</label>
-                            <input type="number" id="mod-voc" class="module-input" placeholder="np. 41.8" step="0.01">
-                        </div>
-                        <div class="param-group">
-                            <label>Isc [A]</label>
-                            <input type="number" id="mod-isc" class="module-input" placeholder="np. 12.68" step="0.01">
-                        </div>
-                        <div class="param-group">
-                            <label>β Voc [%/°C]</label>
-                            <input type="number" id="mod-beta" class="module-input" value="-0.29" step="0.01">
-                        </div>
-                        <div class="param-group">
-                            <label>α Isc [%/°C]</label>
-                            <input type="number" id="mod-alpha" class="module-input" value="0.04" step="0.01">
-                        </div>
+                        <div class="param-group"><label>Producent</label><input type="text" id="mod-manufacturer" class="module-input"></div>
+                        <div class="param-group"><label>Model</label><input type="text" id="mod-model" class="module-input"></div>
+                        <div class="param-group"><label>Pmax [Wp]</label><input type="number" id="mod-pmax" class="module-input"></div>
+                        <div class="param-group"><label>Vmp [V]</label><input type="number" id="mod-vmp" class="module-input"></div>
+                        <div class="param-group"><label>Imp [A]</label><input type="number" id="mod-imp" class="module-input"></div>
+                        <div class="param-group"><label>Voc [V]</label><input type="number" id="mod-voc" class="module-input"></div>
+                        <div class="param-group"><label>Isc [A]</label><input type="number" id="mod-isc" class="module-input"></div>
+                        <div class="param-group"><label>β Voc [%/°C]</label><input type="number" id="mod-beta" class="module-input"></div>
+                        <div class="param-group"><label>α Isc [%/°C]</label><input type="number" id="mod-alpha" class="module-input"></div>
                     </div>
 
-                    <!-- Simulation Conditions -->
-                    <div class="module-section-title">⚙️ Warunki symulacji pomiarów</div>
+                    <div class="module-section-title">⚙️ Warunki symulacji</div>
                     <div class="sim-conditions-grid">
-                        <div class="param-group">
-                            <label>Nasłonecznienie [W/m²]</label>
-                            <input type="number" id="sim-irradiance" class="module-input" value="950" min="100" max="1200">
-                        </div>
-                        <div class="param-group">
-                            <label>Temp. modułu [°C]</label>
-                            <input type="number" id="sim-temp" class="module-input" value="40" min="-20" max="80">
-                        </div>
+                        <div class="param-group"><label>Nasłonecznienie [W/m²]</label><input type="number" id="sim-irradiance" class="module-input" value="1000"></div>
+                        <div class="param-group"><label>Temp. modułu [°C]</label><input type="number" id="sim-temp" class="module-input" value="25"></div>
                     </div>
 
-                    <!-- Simulate button -->
                     <div class="sim-actions">
-                        <button id="simulate-iv-btn" class="tool-btn sim-btn">⚡ Symuluj pomiary DC/AC (I-V model)</button>
+                        <button id="simulate-iv-btn" class="tool-btn sim-btn">⚡ Symuluj pomiary</button>
                         <div id="sim-status" class="ai-status-msg"></div>
                     </div>
-
                 </div>
-
             </section>
         </main>
     </div>
-
     <script src="renderer.js"></script>
 </body>
 </html>

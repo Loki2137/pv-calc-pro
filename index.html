@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PV Calc Pro - Pomiary Elektryczne</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="logo">
+                <span class="logo-icon">⚡</span>
+                <div class="logo-text">
+                    <h1>PV Calc <span>Pro</span></h1>
+                    <small>Lead Engineer Tool</small>
+                </div>
+            </div>
+            <nav class="tabs-nav">
+                <button class="tab-btn active" data-tab="dc-params">Parametry DC</button>
+                <button class="tab-btn" data-tab="dc-insulation">Izolacja DC</button>
+                <button class="tab-btn" data-tab="ac-params">Pomiary AC / IPZ</button>
+                <button class="tab-btn" data-tab="ac-insulation">Izolacja AC / uziom</button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="config-section-title">Parametry globalne</div>
+
+                <div class="config-group">
+                    <label for="mppt-count">Ilość MPPT:</label>
+                    <input type="number" id="mppt-count" value="2" min="1" max="20">
+                </div>
+
+                <div class="config-group">
+                    <label for="un-val">Napięcie fazowe Un [V]:</label>
+                    <input type="number" id="un-val" value="230" min="100" max="400">
+                </div>
+
+
+
+                <div class="config-divider"></div>
+
+                <button id="copy-clipboard-btn" class="primary-btn">📋 Kopiuj do raportu</button>
+            </div>
+        </aside>
+
+        <main class="content-area">
+            <header class="content-header">
+                <h2 id="active-tab-title">Parametry DC (Falownik)</h2>
+                <div class="status-badge">PN-HD 60364-6 / PN-EN 62446-1</div>
+            </header>
+
+            <section id="tab-content" class="scrollable-content">
+
+                <!-- DC Params Tab — Tabela Protokołowa -->
+                <div class="tab-panel active" id="dc-params">
+                    <div class="table-toolbar">
+                        <button id="gen-dc-params-btn" class="tool-btn">🔁 Generuj pomiary DC/AC</button>
+                    </div>
+                    <div class="table-wrapper">
+                        <table id="table-dc-params" class="report-table protocol-table">
+                            <thead>
+                                <tr>
+                                    <th class="col-lp">Lp.</th>
+                                    <th class="col-desc">Próba / sprawdzenie / pomiar</th>
+                                    <th class="col-result">Potwierdzenie sprawdzenia / wynik pomiaru</th>
+                                    <th class="col-ocena">Ocena<br>[OK/Błąd]</th>
+                                </tr>
+                            </thead>
+                            <tbody id="protocol-body">
+                                <!-- Generowane przez renderer.js -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- DC Insulation Tab -->
+                <div class="tab-panel" id="dc-insulation">
+                    <div class="table-toolbar">
+                        <button id="gen-insulation-btn" class="tool-btn">🔁 Generuj pomiary izolacji</button>
+                    </div>
+                    <div class="table-wrapper">
+                        <table id="table-dc-insulation" class="report-table">
+                            <thead>
+                                <tr>
+                                    <th>Obwód (MPPT)</th>
+                                    <th>Biegun</th>
+                                    <th>Wymagana [MΩ]</th>
+                                    <th>Zmierzona [MΩ]</th>
+                                    <th>Napięcie próby [V]</th>
+                                    <th>Ocena</th>
+                                </tr>
+                            </thead>
+                            <tbody id="mppt-insulation-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- AC / IPZ Tab -->
+                <div class="tab-panel" id="ac-params">
+                    <div class="info-card">
+                        <strong>Wzór:</strong> Zs max = Un / (In × k_wkł),&nbsp;&nbsp;
+                        gdzie <em>k_wkł</em> — krotność wkładki topikowej dla t=0,4 s (wg tabeli PN).<br>
+                        <small>Po wpisaniu In [A] wartość k zostanie auto-uzupełniona z tabeli. Możesz ją zmienić ręcznie.</small>
+                    </div>
+
+                    <div class="table-toolbar">
+                        <button id="gen-zs-btn" class="tool-btn">🔁 Generuj Zs zmierzone</button>
+                        <button id="add-ipz-row-btn" class="tool-btn secondary">＋ Dodaj obwód</button>
+                    </div>
+
+                    <div class="table-wrapper">
+                        <table id="table-ipz" class="report-table">
+                            <thead>
+                                <tr>
+                                    <th>Obwód / Faza</th>
+                                    <th>Zabezpieczenie (typ)</th>
+                                    <th>In [A]</th>
+                                    <th>k (wkł. top.)</th>
+                                    <th>Ia (wył.) [A]</th>
+                                    <th>Zs max [Ω]</th>
+                                    <th>Zs zmierzona [Ω]</th>
+                                    <th>Ocena</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ipz-body">
+                                <!-- Generowane przez JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- AC Insulation Tab -->
+                <div class="tab-panel" id="ac-insulation">
+                    <div class="table-wrapper">
+                        <table id="table-ac-insulation" class="report-table">
+                            <thead>
+                                <tr>
+                                    <th>Obwód / Przewód</th>
+                                    <th>Para pomiarowa</th>
+                                    <th>Wymagana [MΩ]</th>
+                                    <th>Zmierzona [MΩ]</th>
+                                    <th>Ocena</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td>Kabel AC</td><td>L1 - PE</td><td>≥ 1.0</td><td><input type="number" class="cell-input res-val" value="500"></td><td class="status-cell status-ok">OK</td></tr>
+                                <tr><td>Kabel AC</td><td>L2 - PE</td><td>≥ 1.0</td><td><input type="number" class="cell-input res-val" value="500"></td><td class="status-cell status-ok">OK</td></tr>
+                                <tr><td>Kabel AC</td><td>L3 - PE</td><td>≥ 1.0</td><td><input type="number" class="cell-input res-val" value="500"></td><td class="status-cell status-ok">OK</td></tr>
+                                <tr><td>Kabel AC</td><td>N - PE</td><td>≥ 1.0</td><td><input type="number" class="cell-input res-val" value="500"></td><td class="status-cell status-ok">OK</td></tr>
+                                <tr class="divider"><td colspan="5">Uziemienie</td></tr>
+                                <tr><td>GSU / Konstrukcja</td><td>Rezystancja uziomu</td><td>< 10.0</td><td><input type="number" class="cell-input res-val" value="5.2"></td><td class="status-cell status-ok">OK</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </section>
+        </main>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>

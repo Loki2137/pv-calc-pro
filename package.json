@@ -1,0 +1,12 @@
+{
+  "name": "pv-calc-pro",
+  "version": "1.0.0",
+  "description": "Kalkulator pomiarów elektrycznych PV",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^28.0.0"
+  }
+}

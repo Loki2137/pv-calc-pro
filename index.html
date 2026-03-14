@@ -22,6 +22,7 @@
                 <button class="tab-btn" data-tab="dc-insulation">Izolacja DC</button>
                 <button class="tab-btn" data-tab="ac-params">Pomiary AC / IPZ</button>
                 <button class="tab-btn" data-tab="ac-insulation">Izolacja AC / uziom</button>
+                <button class="tab-btn ai-tab-btn" data-tab="pv-module">🤖 Moduł PV / AI</button>
             </nav>
 
             <div class="sidebar-footer">
@@ -33,11 +34,24 @@
                 </div>
 
                 <div class="config-group">
+                    <label for="total-modules">Całkowita ilość modułów [szt.]:</label>
+                    <input type="number" id="total-modules" value="20" min="1" max="9999">
+                </div>
+
+                <div class="config-group">
+                    <label for="module-power-w">Moc modułów [W]:</label>
+                    <input type="number" id="module-power-w" value="415" min="1" max="1000">
+                </div>
+
+                <div class="config-group">
                     <label for="un-val">Napięcie fazowe Un [V]:</label>
                     <input type="number" id="un-val" value="230" min="100" max="400">
                 </div>
 
-
+                <div class="power-display-box">
+                    <div class="power-label">⚡ Moc zainstalowana</div>
+                    <div class="power-value" id="installed-power">— kWp</div>
+                </div>
 
                 <div class="config-divider"></div>
 
@@ -53,7 +67,7 @@
 
             <section id="tab-content" class="scrollable-content">
 
-                <!-- DC Params Tab — Tabela Protokołowa -->
+                <!-- DC Params Tab -->
                 <div class="tab-panel active" id="dc-params">
                     <div class="table-toolbar">
                         <button id="gen-dc-params-btn" class="tool-btn">🔁 Generuj pomiary DC/AC</button>
@@ -68,9 +82,7 @@
                                     <th class="col-ocena">Ocena<br>[OK/Błąd]</th>
                                 </tr>
                             </thead>
-                            <tbody id="protocol-body">
-                                <!-- Generowane przez renderer.js -->
-                            </tbody>
+                            <tbody id="protocol-body"></tbody>
                         </table>
                     </div>
                 </div>
@@ -99,12 +111,6 @@
 
                 <!-- AC / IPZ Tab -->
                 <div class="tab-panel" id="ac-params">
-                    <div class="info-card">
-                        <strong>Wzór:</strong> Zs max = Un / (In × k_wkł),&nbsp;&nbsp;
-                        gdzie <em>k_wkł</em> — krotność wkładki topikowej dla t=0,4 s (wg tabeli PN).<br>
-                        <small>Po wpisaniu In [A] wartość k zostanie auto-uzupełniona z tabeli. Możesz ją zmienić ręcznie.</small>
-                    </div>
-
                     <div class="table-toolbar">
                         <button id="gen-zs-btn" class="tool-btn">🔁 Generuj Zs zmierzone</button>
                         <button id="add-ipz-row-btn" class="tool-btn secondary">＋ Dodaj obwód</button>
@@ -115,18 +121,16 @@
                             <thead>
                                 <tr>
                                     <th>Obwód / Faza</th>
-                                    <th>Zabezpieczenie (typ)</th>
+                                    <th>Zabezpieczenie</th>
                                     <th>In [A]</th>
-                                    <th>k (wkł. top.)</th>
-                                    <th>Ia (wył.) [A]</th>
+                                    <th>k</th>
+                                    <th>Ia [A]</th>
                                     <th>Zs max [Ω]</th>
                                     <th>Zs zmierzona [Ω]</th>
                                     <th>Ocena</th>
                                 </tr>
                             </thead>
-                            <tbody id="ipz-body">
-                                <!-- Generowane przez JS -->
-                            </tbody>
+                            <tbody id="ipz-body"></tbody>
                         </table>
                     </div>
                 </div>
@@ -156,10 +160,51 @@
                     </div>
                 </div>
 
+                <!-- PV Module / AI Tab -->
+                <div class="tab-panel" id="pv-module">
+                    <div class="pdf-drop-zone" id="pdf-drop-zone">
+                        <div class="pdf-drop-icon">📄</div>
+                        <div class="pdf-drop-text">Przeciągnij kartę katalogową (PDF) lub kliknij, aby wybrać plik</div>
+                        <input type="file" id="pdf-file-input" accept=".pdf" style="display:none">
+                    </div>
+
+                    <div class="ai-actions-bar">
+                        <button id="extract-pdf-btn" class="tool-btn" disabled>🤖 Ekstraktuj parametry z PDF (AI)</button>
+                        <div id="ai-status" class="ai-status-msg"></div>
+                    </div>
+
+                    <div id="variant-selection-container" style="display: none; margin-bottom: 24px;">
+                        <div class="module-section-title">📦 Wykryte warianty mocy (Wybierz jeden)</div>
+                        <div id="variant-buttons-list" class="variant-grid"></div>
+                    </div>
+
+                    <div class="module-section-title">📋 Parametry modułu PV</div>
+                    <div class="module-params-grid">
+                        <div class="param-group"><label>Producent</label><input type="text" id="mod-manufacturer" class="module-input"></div>
+                        <div class="param-group"><label>Model</label><input type="text" id="mod-model" class="module-input"></div>
+                        <div class="param-group"><label>Pmax [Wp]</label><input type="number" id="mod-pmax" class="module-input"></div>
+                        <div class="param-group"><label>Vmp [V]</label><input type="number" id="mod-vmp" class="module-input"></div>
+                        <div class="param-group"><label>Imp [A]</label><input type="number" id="mod-imp" class="module-input"></div>
+                        <div class="param-group"><label>Voc [V]</label><input type="number" id="mod-voc" class="module-input"></div>
+                        <div class="param-group"><label>Isc [A]</label><input type="number" id="mod-isc" class="module-input"></div>
+                        <div class="param-group"><label>β Voc [%/°C]</label><input type="number" id="mod-beta" class="module-input"></div>
+                        <div class="param-group"><label>α Isc [%/°C]</label><input type="number" id="mod-alpha" class="module-input"></div>
+                    </div>
+
+                    <div class="module-section-title">⚙️ Warunki symulacji</div>
+                    <div class="sim-conditions-grid">
+                        <div class="param-group"><label>Nasłonecznienie [W/m²]</label><input type="number" id="sim-irradiance" class="module-input" value="1000"></div>
+                        <div class="param-group"><label>Temp. modułu [°C]</label><input type="number" id="sim-temp" class="module-input" value="25"></div>
+                    </div>
+
+                    <div class="sim-actions">
+                        <button id="simulate-iv-btn" class="tool-btn sim-btn">⚡ Symuluj pomiary</button>
+                        <div id="sim-status" class="ai-status-msg"></div>
+                    </div>
+                </div>
             </section>
         </main>
     </div>
-
     <script src="renderer.js"></script>
 </body>
 </html>

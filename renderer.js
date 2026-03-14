@@ -1,4 +1,9 @@
-const { clipboard } = require('electron');
+const fs = require('fs');
+
+// ═══════════════════════════════════════════
+// CONFIG / API KEYS
+// ═══════════════════════════════════════════
+const GEMINI_API_KEY = 'AIzaSyC83ccd6_Odfr_nmSG-HNumglRBvJaXBvY';
 
 // ═══════════════════════════════════════════════════════
 // TABELA KROTNOŚCI k DLA WKŁADEK TOPIKOWYCH (t = 0,4 s)
@@ -18,6 +23,9 @@ function lookupK(In) { return FUSE_K_TABLE[In] ?? null; }
 // ═══════════════════════════════════════════
 const mpptInput          = document.getElementById('mppt-count');
 const unInput            = document.getElementById('un-val');
+const totalModulesIn     = document.getElementById('total-modules');
+const modulePowerWIn     = document.getElementById('module-power-w');
+const installedPowerEl   = document.getElementById('installed-power');
 
 const protocolBody       = document.getElementById('protocol-body');
 const mpptInsulationBody = document.getElementById('mppt-insulation-body');
@@ -30,6 +38,32 @@ const addIpzRowBtn       = document.getElementById('add-ipz-row-btn');
 const ipzBody            = document.getElementById('ipz-body');
 const genInsulationBtn   = document.getElementById('gen-insulation-btn');
 const genDcParamsBtn     = document.getElementById('gen-dc-params-btn');
+
+// AI / Module refs
+const pdfDropZone        = document.getElementById('pdf-drop-zone');
+const pdfFileInput       = document.getElementById('pdf-file-input');
+const extractPdfBtn      = document.getElementById('extract-pdf-btn');
+const aiStatus           = document.getElementById('ai-status');
+const openaiKeyInput     = document.getElementById('openai-key');
+const toggleKeyBtn       = document.getElementById('toggle-key-btn');
+const saveKeyBtn         = document.getElementById('save-key-btn');
+const keyStatus          = document.getElementById('key-status');
+const simulateIvBtn      = document.getElementById('simulate-iv-btn');
+const simStatus          = document.getElementById('sim-status');
+
+// ═══════════════════════════════════════════
+// Module Parameters Store
+// ═══════════════════════════════════════════
+let moduleParams = null;
+let selectedPdfPath = null;
+
+// Load saved API key
+// Initial pre-fill with hardcoded key if not set
+if (!localStorage.getItem('gemini_api_key')) {
+    localStorage.setItem('gemini_api_key', GEMINI_API_KEY);
+}
+const savedKey = localStorage.getItem('gemini_api_key');
+if (savedKey) { openaiKeyInput.value = savedKey; keyStatus.textContent = '✅ Klucz załadowany z konfiguracji'; }
 
 // ═══════════════════════════════════════════
 // TABS
@@ -70,6 +104,21 @@ document.addEventListener('click', e => {
         });
     }
 });
+
+// ═══════════════════════════════════════════
+// INSTALLED POWER CALCULATOR
+// ═══════════════════════════════════════════
+function updateInstalledPower() {
+    const totalModules = parseInt(totalModulesIn.value) || 0;
+    const modulePowerW = parseFloat(modulePowerWIn.value) || 0;
+    if (totalModules <= 0 || modulePowerW <= 0) {
+        installedPowerEl.textContent = '— kWp';
+        return;
+    }
+    const totalPower = (totalModules * modulePowerW / 1000).toFixed(2);
+    installedPowerEl.textContent = `${totalPower} kWp`;
+    installedPowerEl.title = `${totalModules} szt. × ${modulePowerW} W`;
+}
 
 // ═══════════════════════════════════════════
 // PROTOKÓŁ DC — budowanie tabeli
@@ -207,7 +256,105 @@ genInsulationBtn.addEventListener('click', () => {
     });
 });
 
-// ─ Generator DC/AC ─
+// ═══════════════════════════════════════════
+// PHYSICS SIMULATION ENGINE (I-V Model)
+// ═══════════════════════════════════════════
+
+// Gaussian random (Box–Muller transform)
+function gaussian() {
+    let u = 0, v = 0;
+    while (u === 0) u = Math.random();
+    while (v === 0) v = Math.random();
+    return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+}
+
+// Simulate one MPPT measurement based on module parameters
+function simulateOneMPPT(params, irradiance, tempModule) {
+    const { vmp, imp, beta = -0.29, alpha = 0.04 } = params;
+    const modulesPerStr  = parseInt(modulesPerStringIn.value) || 20;
+    const stringsPerMppt = parseInt(stringsPerMpptIn.value)   || 1;
+
+    const irradFactor = irradiance / 1000;
+    const deltaT = tempModule - 25;
+
+    // Temperature + irradiance correction
+    const VmpCorr = vmp * modulesPerStr * (1 + (beta / 100) * deltaT);
+    const ImpCorr = imp * stringsPerMppt * irradFactor * (1 + (alpha / 100) * deltaT);
+
+    // Realistic instrument noise — Gaussian sigma ~0.4%
+    const vNoise = 1 + gaussian() * 0.004;
+    const iNoise = 1 + gaussian() * 0.004;
+
+    return {
+        V: Math.max(0, parseFloat((VmpCorr * vNoise).toFixed(2))),
+        I: Math.max(0, parseFloat((ImpCorr * iNoise).toFixed(2)))
+    };
+}
+
+// Simulate AC voltages (nominal ±1–3V with slight asymmetry between phases)
+function simulateACVoltages(unNominal) {
+    const base = unNominal || 230;
+    // Realistic variation: ±2% from nominal, slight asymmetry
+    const offset = gaussian() * 2; // common mode
+    return [
+        parseFloat((base + offset + gaussian() * 1.2).toFixed(2)),
+        parseFloat((base + offset + gaussian() * 1.2).toFixed(2)),
+        parseFloat((base + offset + gaussian() * 1.2).toFixed(2))
+    ];
+}
+
+// ─ Run full physics simulation ─
+simulateIvBtn.addEventListener('click', () => {
+    if (!moduleParams) {
+        setSimStatus('❌ Najpierw uzupełnij parametry modułu PV w zakładce "Moduł PV / AI"', 'err');
+        return;
+    }
+
+    const irradiance  = parseFloat(document.getElementById('sim-irradiance').value) || 950;
+    const tempModule  = parseFloat(document.getElementById('sim-temp').value) || 40;
+    const mpptCount   = parseInt(mpptInput.value) || 1;
+    const Un          = parseFloat(unInput.value) || 230;
+
+    // Fill MPPT cells
+    const mpptCells = document.querySelectorAll('.mppt-row-cell');
+    mpptCells.forEach(cell => {
+        const inputs = cell.querySelectorAll('input');
+        const result = simulateOneMPPT(moduleParams, irradiance, tempModule);
+        if (inputs[0]) inputs[0].value = result.V;
+        if (inputs[1]) inputs[1].value = result.I;
+        // Flash green
+        cell.querySelectorAll('input').forEach(inp => {
+            inp.style.borderColor = '#10b981';
+            setTimeout(() => { inp.style.borderColor = ''; }, 900);
+        });
+    });
+
+    // Fill AC voltages
+    const acInputs = document.querySelectorAll('.ac-three-grid input');
+    const acVols = simulateACVoltages(Un);
+    acInputs.forEach((inp, idx) => {
+        inp.value = acVols[idx] || acVols[0];
+        inp.style.borderColor = '#10b981';
+        setTimeout(() => { inp.style.borderColor = ''; }, 900);
+    });
+
+    // Serial number
+    const serialInput = document.querySelector('.serial-input');
+    if (serialInput && !serialInput.value) serialInput.value = randomStr(12);
+
+    setSimStatus(`✅ Symulacja zakończona — ${moduleParams.manufacturer || ''} ${moduleParams.model || ''} @ ${irradiance} W/m², ${tempModule}°C`, 'ok');
+
+    // Switch to DC Params tab to show results
+    setTimeout(() => {
+        tabButtons.forEach(b => b.classList.remove('active'));
+        tabPanels.forEach(p => p.classList.remove('active'));
+        document.querySelector('[data-tab="dc-params"]').classList.add('active');
+        document.getElementById('dc-params').classList.add('active');
+        activeTabTitle.innerText = 'Parametry DC';
+    }, 700);
+});
+
+// ─ Generator DC/AC (fallback — random, no module params) ─
 function randomStr(len) {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let res = '';
@@ -216,26 +363,239 @@ function randomStr(len) {
 }
 
 genDcParamsBtn.addEventListener('click', () => {
-    // 1. DC V (300-700) i DC A (9-14)
+    if (moduleParams) {
+        // Delegate to physics simulation
+        simulateIvBtn.click();
+        return;
+    }
+
+    // Fallback: simple random
     document.querySelectorAll('.mppt-row-cell').forEach(cell => {
         const inputs = cell.querySelectorAll('input');
         if (inputs[0]) inputs[0].value = (Math.random() * 400 + 300).toFixed(0);
         if (inputs[1]) inputs[1].value = (Math.random() * 5 + 9).toFixed(1);
     });
 
-    // 2. AC V (223-249)
     document.querySelectorAll('.ac-three-grid input').forEach(inp => {
         inp.value = (Math.random() * 26 + 223).toFixed(0);
     });
 
-    // 3. Serial (12 chars)
     const serialInput = document.querySelector('.serial-input');
     if (serialInput) serialInput.value = randomStr(12);
 
-    // Wizualny feedback
     genDcParamsBtn.style.background = '#10b981';
     setTimeout(() => { genDcParamsBtn.style.background = ''; }, 600);
 });
+
+// ═══════════════════════════════════════════
+// PDF DROP ZONE
+// ═══════════════════════════════════════════
+pdfDropZone.addEventListener('click', () => pdfFileInput.click());
+
+pdfDropZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    pdfDropZone.classList.add('drag-over');
+});
+
+pdfDropZone.addEventListener('dragleave', () => pdfDropZone.classList.remove('drag-over'));
+
+pdfDropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    pdfDropZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file && file.name.toLowerCase().endsWith('.pdf')) {
+        handlePdfFile(file);
+    }
+});
+
+pdfFileInput.addEventListener('change', () => {
+    if (pdfFileInput.files[0]) handlePdfFile(pdfFileInput.files[0]);
+});
+
+function handlePdfFile(file) {
+    selectedPdfPath = file.path;
+    pdfDropZone.querySelector('.pdf-drop-text').textContent = `📄 ${file.name}`;
+    pdfDropZone.classList.add('pdf-loaded');
+    extractPdfBtn.disabled = false;
+    setAiStatus(`✅ Wczytano plik: ${file.name}`, 'ok');
+}
+
+// ═══════════════════════════════════════════
+// API KEY MANAGEMENT
+// ═══════════════════════════════════════════
+toggleKeyBtn.addEventListener('click', () => {
+    openaiKeyInput.type = openaiKeyInput.type === 'password' ? 'text' : 'password';
+    toggleKeyBtn.textContent = openaiKeyInput.type === 'password' ? '👁' : '🙈';
+});
+
+saveKeyBtn.addEventListener('click', () => {
+    const key = openaiKeyInput.value.trim();
+    if (!key.startsWith('AIza')) {
+        keyStatus.textContent = '❌ Nieprawidłowy klucz';
+        keyStatus.style.color = 'var(--danger)';
+        return;
+    }
+    localStorage.setItem('gemini_api_key', key);
+    keyStatus.textContent = '✅ Klucz zapisany';
+    keyStatus.style.color = 'var(--accent)';
+});
+
+// ═══════════════════════════════════════════
+const { ipcRenderer, clipboard } = require('electron');
+
+// PDF TEXT EXTRACTION + AI PARAMETER PARSING
+// ═══════════════════════════════════════════
+extractPdfBtn.addEventListener('click', async () => {
+    // Priority: hardcoded key (GEMINI_API_KEY) unless it is a placeholder
+    let apiKey = GEMINI_API_KEY;
+    
+    // If user has a custom key in localStorage that is different, we can keep it, 
+    // but the error "expired" suggests we need to force the new one.
+    // Forcing the hardcoded key as requested:
+    localStorage.setItem('gemini_api_key', GEMINI_API_KEY);
+    
+    if (!apiKey || !apiKey.startsWith('AIza')) {
+        setAiStatus('❌ Wprowadź i zapisz klucz Gemini API', 'err');
+        return;
+    }
+    if (!selectedPdfPath) {
+        setAiStatus('❌ Najpierw wczytaj plik PDF', 'err');
+        return;
+    }
+
+    extractPdfBtn.disabled = true;
+    setAiStatus('⏳ Czytam plik PDF…', 'loading');
+
+    try {
+        // Extract text via Main Process to avoid worker error in Electron Renderer
+        const rawText = await ipcRenderer.invoke('extract-pdf-text', selectedPdfPath);
+
+        if (!rawText || rawText.length < 50) {
+            setAiStatus('❌ Nie udało się odczytać tekstu z PDF. Plik może być zeskanowany.', 'err');
+            extractPdfBtn.disabled = false;
+            return;
+        }
+
+        setAiStatus('⏳ Wysyłam do Gemini…', 'loading');
+
+        const extracted = await extractParamsViaGemini(rawText, apiKey);
+        fillModuleParams(extracted);
+        moduleParams = extracted;
+        updateInstalledPower();
+        setAiStatus(`✅ Parametry wyodrębnione: ${extracted.manufacturer || ''} ${extracted.model || ''} ${extracted.pmax || '—'} Wp`, 'ok');
+
+    } catch (err) {
+        console.error(err);
+        setAiStatus(`❌ Błąd: ${err.message}`, 'err');
+    }
+
+    extractPdfBtn.disabled = false;
+});
+
+async function extractParamsViaGemini(text, apiKey) {
+    const prompt = `Jesteś ekspertem od fotowoltaiki. Wyodrębnij parametry elektryczne modułu PV z poniższej karty katalogowej. Zwróć WYŁĄCZNIE poprawny JSON, bez żadnego dodatkowego tekstu, komentarzy ani markdown.
+
+Format JSON (wszystkie wartości numeryczne jako liczby, nie stringi):
+{
+  "manufacturer": "string — producent",
+  "model": "string — model/oznaczenie",
+  "pmax": number (moc szczytowa Wp),
+  "vmp": number (napięcie przy Pmax, V),
+  "imp": number (prąd przy Pmax, A),
+  "voc": number (napięcie obwodu otwartego, V),
+  "isc": number (prąd zwarcia, A),
+  "beta": number (temp. wsp. Voc, %/°C, wartość ujemna np. -0.25),
+  "alpha": number (temp. wsp. Isc, %/°C, wartość dodatnia np. 0.045)
+}
+
+Karta katalogowa:
+${text.substring(0, 15000)}`;
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+                temperature: 0.1,
+                responseMimeType: "application/json"
+            }
+        })
+    });
+
+    if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error?.message || `HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    let content = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+    
+    // Zapobieganie błędom: usuwanie markdown ```json ... ``` jeśli AI je dodało
+    content = content.replace(/```json\n?|```/g, '').trim();
+    
+    try {
+        return JSON.parse(content);
+    } catch (e) {
+        console.error('JSON Parse Error. Raw content:', content);
+        throw new Error('AI zwróciło nieprawidłowy format danych. Spróbuj ponownie.');
+    }
+}
+
+function fillModuleParams(params) {
+    const set = (id, val) => {
+        const el = document.getElementById(id);
+        if (el && val !== undefined && val !== null) el.value = val;
+    };
+    set('mod-manufacturer', params.manufacturer);
+    set('mod-model',        params.model);
+    set('mod-pmax',         params.pmax);
+    set('mod-vmp',          params.vmp);
+    set('mod-imp',          params.imp);
+    set('mod-voc',          params.voc);
+    set('mod-isc',          params.isc);
+    set('mod-beta',         params.beta);
+    set('mod-alpha',        params.alpha);
+}
+
+// Read module params from form inputs
+function readModuleParamsFromForm() {
+    const g = id => parseFloat(document.getElementById(id).value);
+    const s = id => document.getElementById(id).value;
+    const p = {
+        manufacturer: s('mod-manufacturer'),
+        model:        s('mod-model'),
+        pmax:         g('mod-pmax'),
+        vmp:          g('mod-vmp'),
+        imp:          g('mod-imp'),
+        voc:          g('mod-voc'),
+        isc:          g('mod-isc'),
+        beta:         g('mod-beta'),
+        alpha:        g('mod-alpha'),
+    };
+    if (!p.vmp || !p.imp) return null;
+    return p;
+}
+
+// Listen for manual changes in module params form
+document.querySelectorAll('#pv-module input').forEach(inp => {
+    inp.addEventListener('input', () => {
+        moduleParams = readModuleParamsFromForm();
+        updateInstalledPower();
+    });
+});
+
+function setAiStatus(msg, type) {
+    aiStatus.textContent = msg;
+    aiStatus.className = `ai-status-msg ${type === 'err' ? 'ai-err' : type === 'ok' ? 'ai-ok' : 'ai-loading'}`;
+}
+
+function setSimStatus(msg, type) {
+    simStatus.textContent = msg;
+    simStatus.className = `ai-status-msg ${type === 'err' ? 'ai-err' : type === 'ok' ? 'ai-ok' : 'ai-loading'}`;
+}
 
 // ═══════════════════════════════════════════
 // IPZ
@@ -283,16 +643,12 @@ function createIPZRow(circuitName = 'Obwód AC', type = 'WT', In = 16) {
         <td class="status-cell ipz-status">—</td>
     `;
 
-    // Synchronizacja In [A] dla wszystkich wierszy
     row.querySelector('.In-val').addEventListener('input', e => {
         const newVal = e.target.value;
         const kFound = lookupK(parseInt(newVal));
-        
-        // Zmień we wszystkich wierszach
         ipzBody.querySelectorAll('tr').forEach(r => {
             const inInput = r.querySelector('.In-val');
             const kInput  = r.querySelector('.k-fuse-val');
-            
             inInput.value = newVal;
             if (kFound !== null) {
                 kInput.value = kFound;
@@ -332,7 +688,13 @@ addIpzRowBtn.addEventListener('click', () => {
 // ═══════════════════════════════════════════
 document.addEventListener('input', e => {
     const t = e.target;
-    if (t === mpptInput) { buildProtocolTable(); buildInsulationTable(); }
+    if (t === mpptInput) {
+        buildProtocolTable();
+        buildInsulationTable();
+    }
+    if (t === totalModulesIn || t === modulePowerWIn) {
+        updateInstalledPower();
+    }
     if (t === unInput) recalcAllIPZ();
     if (t.classList.contains('k-fuse-val') || t.classList.contains('zs-m-val')) {
         const row = t.closest('tr');
@@ -353,7 +715,6 @@ document.addEventListener('input', e => {
 
 // ═══════════════════════════════════════════════════════════════════════
 // KOPIUJ DO SCHOWKA — export Word z zagnieżdżonymi tabelami
-// Word NIE interpretuje CSS flex/grid — sub-kolumny MUSZĄ być tabelą.
 // ═══════════════════════════════════════════════════════════════════════
 const WS = {
     tbl:  'border-collapse:collapse;width:100%;font-family:Arial,sans-serif;font-size:10pt;mso-para-margin:0pt;margin:0;line-height:normal;',
@@ -371,7 +732,6 @@ function getTakNieText(group) {
     const sel = group.querySelector('.tak-nie-opt.selected');
     if (!sel) return 'NIE / TAK';
     const selected = sel.dataset.val;
-    // mso-text-strike:single wymuszony przez Word przy wklejaniu HTML
     const S = `text-decoration:line-through;mso-text-strike:single;color:#888;`;
     if (selected === 'NIE') {
         return `NIE / <span style="${S}">TAK</span>`;
@@ -389,12 +749,10 @@ function buildWordProtocolTable() {
     const mpptCount = parseInt(mpptInput.value) || 1;
     let rows = '';
 
-    // Style helper
     const tbl = (inner) => `<table style="${WS.inner}">${inner}</table>`;
     const td  = (content, style, extra='') =>
         `<td style="${style}" ${extra}>${content}</td>`;
 
-    // -- NAGŁÓWEK --
     rows += `<tr>
         ${td('Lp.', WS.th + 'width:45px;')}
         ${td('Próba / sprawdzenie / pomiar', WS.th + 'width:200px;')}
@@ -402,7 +760,6 @@ function buildWordProtocolTable() {
         ${td('Ocena', WS.th + 'width:80px;')}
     </tr>`;
 
-    // -- Podwiersz z kreskami --
     rows += `<tr>
         ${td('–', WS.tdC + 'color:#888;')}
         ${td('–', WS.tdC + 'color:#888;')}
@@ -410,7 +767,6 @@ function buildWordProtocolTable() {
         ${td('[OK/BŁĄD]', WS.tdC + 'font-size:9pt;color:#888;')}
     </tr>`;
 
-    // -- 1. Polaryzacja --
     const row1Group = document.querySelector('#protocol-body tr:nth-child(2) .tak-nie-group');
     const row1Ocena = document.querySelector('#protocol-body tr:nth-child(2) .ocena-cell');
     rows += `<tr>
@@ -420,7 +776,6 @@ function buildWordProtocolTable() {
         ${td(row1Ocena ? getOcenaText(row1Ocena) : 'OK', WS.tdO)}
     </tr>`;
 
-    // -- 2. MPPT -- (każdy MPPT: zagnieżdżona 2-kol tabela)
     const mpptRows = document.querySelectorAll('#protocol-body .mppt-row-cell');
     const mpptOceny= document.querySelectorAll('#protocol-body .mppt-row-cell + .ocena-cell');
 
@@ -447,7 +802,6 @@ function buildWordProtocolTable() {
     });
     rows += mpptBody;
 
-    // -- 3. Napięcia AC (zagnieżdżona 3-kol tabela) --
     const acInputs = document.querySelectorAll('#protocol-body .ac-three-grid input');
     const acOcena  = document.querySelector('#protocol-body .ac-three-grid')?.closest('tr')?.querySelector('.ocena-cell');
     const l1 = acInputs[0]?.value || '';
@@ -467,7 +821,6 @@ function buildWordProtocolTable() {
         ${td(acOcena ? getOcenaText(acOcena) : 'OK', WS.tdO)}
     </tr>`;
 
-    // -- 4. Weryfikacja falownika (2 podwiersze z separetoem poziomym) --
     const allRows = document.querySelectorAll('#protocol-body tr');
     let row4aEl, row4bEl;
     allRows.forEach(r => {
@@ -490,7 +843,6 @@ function buildWordProtocolTable() {
         ${td(`NR seryjny: ${werSerial?.value || ''}`, WS.tdC + 'border-top:1px solid #000;')}
     </tr>`;
 
-    // -- 5. Połączenia wyrównawcze --
     let row5El;
     allRows.forEach(r => {
         if (r.querySelector('.desc-cell') && r.querySelector('.desc-cell').textContent.includes('wyrównawcz')) row5El = r;
@@ -509,7 +861,6 @@ function buildWordProtocolTable() {
 }
 
 function buildWordGenericTable(table) {
-    // Dla pozostałych zakładek — klasyczny klon
     const clone = table.cloneNode(true);
     clone.querySelectorAll('input').forEach(inp => {
         const s = document.createElement('span'); s.innerText = inp.value||''; inp.parentNode.replaceChild(s,inp);
@@ -539,8 +890,6 @@ copyBtn.addEventListener('click', () => {
         html = buildWordGenericTable(table);
     }
 
-    // Owiniecie w pełny dokument HTML z przestrzeniami nazw Office — wymaga tego Word
-    // żeby poprawnie renderował CSS takie jak text-decoration:line-through
     const wordDoc = `<html xmlns:o="urn:schemas-microsoft-com:office:office"
         xmlns:w="urn:schemas-microsoft-com:office:word"
         xmlns="http://www.w3.org/TR/REC-html40">
@@ -569,3 +918,4 @@ copyBtn.addEventListener('click', () => {
 buildProtocolTable();
 buildInsulationTable();
 initIPZTable();
+updateInstalledPower();

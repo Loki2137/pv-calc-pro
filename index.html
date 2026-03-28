@@ -22,6 +22,7 @@
                 <button class="tab-btn" data-tab="dc-insulation">Izolacja DC</button>
                 <button class="tab-btn" data-tab="ac-params">Pomiary AC / IPZ</button>
                 <button class="tab-btn" data-tab="ac-insulation">Izolacja AC / uziom</button>
+                <button class="tab-btn ai-tab-btn" data-tab="pv-module">🤖 Moduł PV / AI</button>
             </nav>
 
             <div class="sidebar-footer">
@@ -33,11 +34,24 @@
                 </div>
 
                 <div class="config-group">
+                    <label for="total-modules">Całkowita ilość modułów [szt.]:</label>
+                    <input type="number" id="total-modules" value="20" min="1" max="9999">
+                </div>
+
+                <div class="config-group">
+                    <label for="module-power-w">Moc modułów [W]:</label>
+                    <input type="number" id="module-power-w" value="415" min="1" max="1000">
+                </div>
+
+                <div class="config-group">
                     <label for="un-val">Napięcie fazowe Un [V]:</label>
                     <input type="number" id="un-val" value="230" min="100" max="400">
                 </div>
 
-
+                <div class="power-display-box">
+                    <div class="power-label">⚡ Moc zainstalowana</div>
+                    <div class="power-value" id="installed-power">— kWp</div>
+                </div>
 
                 <div class="config-divider"></div>
 
@@ -154,6 +168,93 @@
                             </tbody>
                         </table>
                     </div>
+                </div>
+
+                <!-- PV Module / AI Tab -->
+                <div class="tab-panel" id="pv-module">
+
+                    <!-- AI Key section (Hidden - Hardcoded in renderer.js) -->
+                    <div class="ai-key-bar" style="display: none;">
+                        <span class="ai-key-label">🔑 Klucz Gemini API:</span>
+                        <input type="password" id="openai-key" placeholder="AIza..." class="ai-key-input">
+                        <button id="toggle-key-btn" class="tool-btn secondary" style="padding:8px 12px;">👁</button>
+                        <button id="save-key-btn" class="tool-btn" style="padding:8px 14px;">Zapisz</button>
+                        <div id="key-status" class="key-status"></div>
+                    </div>
+
+                    <!-- PDF Drop Zone -->
+                    <div class="pdf-drop-zone" id="pdf-drop-zone">
+                        <div class="pdf-drop-icon">📄</div>
+                        <div class="pdf-drop-text">Przeciągnij kartę katalogową (PDF) lub kliknij, aby wybrać plik</div>
+                        <div class="pdf-drop-hint">Obsługiwane formaty: PDF</div>
+                        <input type="file" id="pdf-file-input" accept=".pdf" style="display:none">
+                    </div>
+
+                    <div class="ai-actions-bar">
+                        <button id="extract-pdf-btn" class="tool-btn" disabled>🤖 Ekstraktuj parametry z PDF (AI)</button>
+                        <div id="ai-status" class="ai-status-msg"></div>
+                    </div>
+
+                    <!-- Module Parameters Grid -->
+                    <div class="module-section-title">📋 Parametry modułu PV (STC: 1000 W/m², 25°C)</div>
+                    <div class="module-params-grid">
+                        <div class="param-group">
+                            <label>Producent</label>
+                            <input type="text" id="mod-manufacturer" class="module-input" placeholder="np. JA Solar">
+                        </div>
+                        <div class="param-group">
+                            <label>Model</label>
+                            <input type="text" id="mod-model" class="module-input" placeholder="np. JAM72S30-545MR">
+                        </div>
+                        <div class="param-group">
+                            <label>Pmax [Wp]</label>
+                            <input type="number" id="mod-pmax" class="module-input" placeholder="np. 415" step="0.01">
+                        </div>
+                        <div class="param-group">
+                            <label>Vmp [V]</label>
+                            <input type="number" id="mod-vmp" class="module-input" placeholder="np. 34.5" step="0.01">
+                        </div>
+                        <div class="param-group">
+                            <label>Imp [A]</label>
+                            <input type="number" id="mod-imp" class="module-input" placeholder="np. 12.02" step="0.01">
+                        </div>
+                        <div class="param-group">
+                            <label>Voc [V]</label>
+                            <input type="number" id="mod-voc" class="module-input" placeholder="np. 41.8" step="0.01">
+                        </div>
+                        <div class="param-group">
+                            <label>Isc [A]</label>
+                            <input type="number" id="mod-isc" class="module-input" placeholder="np. 12.68" step="0.01">
+                        </div>
+                        <div class="param-group">
+                            <label>β Voc [%/°C]</label>
+                            <input type="number" id="mod-beta" class="module-input" value="-0.29" step="0.01">
+                        </div>
+                        <div class="param-group">
+                            <label>α Isc [%/°C]</label>
+                            <input type="number" id="mod-alpha" class="module-input" value="0.04" step="0.01">
+                        </div>
+                    </div>
+
+                    <!-- Simulation Conditions -->
+                    <div class="module-section-title">⚙️ Warunki symulacji pomiarów</div>
+                    <div class="sim-conditions-grid">
+                        <div class="param-group">
+                            <label>Nasłonecznienie [W/m²]</label>
+                            <input type="number" id="sim-irradiance" class="module-input" value="950" min="100" max="1200">
+                        </div>
+                        <div class="param-group">
+                            <label>Temp. modułu [°C]</label>
+                            <input type="number" id="sim-temp" class="module-input" value="40" min="-20" max="80">
+                        </div>
+                    </div>
+
+                    <!-- Simulate button -->
+                    <div class="sim-actions">
+                        <button id="simulate-iv-btn" class="tool-btn sim-btn">⚡ Symuluj pomiary DC/AC (I-V model)</button>
+                        <div id="sim-status" class="ai-status-msg"></div>
+                    </div>
+
                 </div>
 
             </section>
